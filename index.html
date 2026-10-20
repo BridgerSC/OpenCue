@@ -20,39 +20,40 @@
 </head>
 <body>
 
-  <!-- ============================================================ Editor -->
-  <section id="editor-view" class="editor-view">
-    <aside id="sidebar" class="sidebar" aria-label="Script library">
-      <div class="sidebar-head">
-        <div class="brand">
-          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M9 11h14M9 16h9M9 21h12"/></svg>
-          <span>OpenCue</span>
-        </div>
-        <button id="sidebar-close" class="icon-btn mobile-only" data-icon="close" aria-label="Close library"></button>
+  <!-- ========================================================= Scripts panel -->
+  <aside id="sidebar" class="sidebar" aria-label="Scripts">
+    <div class="sidebar-head">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M9 11h14M9 16h9M9 21h12"/></svg>
+        <span>OpenCue</span>
       </div>
-      <button id="new-script" class="btn primary block" data-icon="plus"><span class="label">New script</span></button>
-      <label class="search-field">
-        <span class="search-icon" data-icon="search"></span>
-        <input id="script-search" type="search" placeholder="Search scripts" aria-label="Search scripts" autocomplete="off" spellcheck="false">
-      </label>
-      <div class="list-head"><span>Scripts</span><span id="script-count" class="count">0</span></div>
-      <ul id="script-list" class="script-list" aria-label="Scripts"></ul>
-      <div id="list-empty" class="list-empty" hidden>
-        <p>No scripts match <span id="list-empty-q"></span></p>
-        <button id="clear-search" class="btn ghost small">Clear search</button>
-      </div>
-      <button id="install-btn" class="btn block install-btn" data-icon="download" hidden><span class="label">Install OpenCue as an app</span></button>
-      <div class="sidebar-foot">
-        <button id="import-btn" class="btn ghost small" data-icon="upload" data-tip="Import .txt, .md or an OpenCue backup"><span class="label">Import</span></button>
-        <button id="backup-btn" class="btn ghost small" data-icon="archive" data-tip="Download all scripts as a JSON backup"><span class="label">Backup</span></button>
-        <input type="file" id="import-file" accept=".txt,.md,.markdown,.json,text/plain,application/json" multiple hidden>
-      </div>
-    </aside>
-    <div id="scrim" class="scrim" aria-hidden="true"></div>
+      <button id="sidebar-close" class="icon-btn" data-icon="close" aria-label="Close scripts"></button>
+    </div>
+    <button id="new-script" class="btn primary block" data-icon="plus"><span class="label">New script</span></button>
+    <label class="search-field">
+      <span class="search-icon" data-icon="search"></span>
+      <input id="script-search" type="search" placeholder="Search scripts" aria-label="Search scripts" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="list-head"><span>Scripts</span><span id="script-count" class="count">0</span></div>
+    <ul id="script-list" class="script-list" aria-label="Scripts"></ul>
+    <div id="list-empty" class="list-empty" hidden>
+      <p>No scripts match <span id="list-empty-q"></span></p>
+      <button id="clear-search" class="btn ghost small">Clear search</button>
+    </div>
+    <button id="remote-tab-btn" class="btn block remote-tab-btn" data-icon="remote"><span class="label">Use this device as a remote</span></button>
+    <button id="install-btn" class="btn block install-btn" data-icon="download" hidden><span class="label">Install OpenCue as an app</span></button>
+    <div class="sidebar-foot">
+      <button id="import-btn" class="btn ghost small" data-icon="upload" data-tip="Import .txt, .md or an OpenCue backup"><span class="label">Import</span></button>
+      <button id="backup-btn" class="btn ghost small" data-icon="archive" data-tip="Download all scripts as a JSON backup"><span class="label">Backup</span></button>
+      <input type="file" id="import-file" accept=".txt,.md,.markdown,.json,text/plain,application/json" multiple hidden>
+    </div>
+  </aside>
+  <div id="scrim" class="scrim" aria-hidden="true"></div>
 
-    <main class="editor-main">
+  <!-- ========================================================== Editor (pop-up) -->
+  <section id="editor-panel" class="editor-panel" role="dialog" aria-modal="true" aria-label="Edit script" hidden>
+    <div class="editor-main">
       <header class="editor-head">
-        <button id="sidebar-toggle" class="icon-btn mobile-only" data-icon="menu" aria-label="Show scripts" aria-controls="sidebar" aria-expanded="false"></button>
         <div class="head-main">
           <input id="script-title" class="title-input" placeholder="Untitled script" aria-label="Script title" autocomplete="off">
           <div class="chips">
@@ -63,7 +64,8 @@
         <div class="head-actions">
           <button id="export-btn" class="icon-btn" data-icon="download" aria-label="Export as .txt" data-tip="Export as .txt"></button>
           <button id="delete-btn" class="icon-btn danger" data-icon="trash" aria-label="Delete script" data-tip="Delete script"></button>
-          <button id="start-btn" class="btn primary lg" data-icon="play" data-tip="Present" data-kbd="Ctrl+Enter"><span class="label">Present</span></button>
+          <button id="editor-done" class="btn lg" data-tip="Close the editor" data-kbd="Esc"><span class="label">Done</span></button>
+          <button id="start-btn" class="btn primary lg" data-icon="play" data-tip="Present this script" data-kbd="Ctrl+Enter"><span class="label">Present</span></button>
         </div>
       </header>
 
@@ -89,11 +91,11 @@
         <span class="saved"><span class="saved-dot" aria-hidden="true"></span>Saved in this browser</span>
         <span class="hint"><code>[cue]</code> not read aloud · <code># Heading</code> · <code>*emphasis*</code></span>
       </footer>
-    </main>
+    </div>
   </section>
 
   <!-- ========================================================= Prompter -->
-  <section id="prompter-view" class="prompter-view" hidden>
+  <section id="prompter-view" class="prompter-view">
     <div id="stage" class="stage">
       <div id="camera-wrap" class="camera-wrap">
         <video id="camera" muted playsinline autoplay></video>
@@ -117,7 +119,7 @@
     </div>
 
     <div class="topbar chrome">
-      <button id="tb-back" class="float-btn" data-icon="back" aria-label="Back to editor" data-tip="Back to editor" data-kbd="Esc"><span id="prompter-title" class="label"></span></button>
+      <button id="tb-library" class="float-btn" data-icon="menu" aria-label="Scripts" aria-controls="sidebar" aria-expanded="false" data-tip="Your scripts"><span class="float-strong">Scripts</span><span id="prompter-title" class="label"></span></button>
     </div>
 
     <div id="dock" class="dock chrome">
@@ -157,6 +159,7 @@
           </div>
           <button id="tb-mirror" class="tb-btn labeled hide-narrow" data-icon="mirror" aria-label="Mirror" aria-pressed="false" data-tip="Mirror for a teleprompter rig" data-kbd="M"><span class="label">Mirror</span></button>
           <button id="tb-fullscreen" class="tb-btn labeled hide-narrow" data-icon="fullscreen" aria-label="Fullscreen" data-tip="Fullscreen" data-kbd="F"><span class="label">Fullscreen</span></button>
+          <button id="tb-remote" class="tb-btn labeled hide-narrow" data-icon="remote" aria-label="Pair a remote" data-tip="Pair a phone or tablet as a remote"><span class="label">Remote</span></button>
           <button id="tb-settings" class="tb-btn labeled" data-icon="settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel" data-tip="Settings" data-kbd="S"><span class="label">Settings</span></button>
         </div>
       </div>
@@ -191,10 +194,79 @@
     </form>
   </dialog>
 
+  <!-- ========================================================== Remote -->
+  <section id="remote-view" class="remote-view" aria-label="Remote control" hidden>
+    <div class="rc-wrap">
+      <header class="rc-head">
+        <button id="rc-back" class="btn small" data-icon="back" type="button"><span class="label">Prompter</span></button>
+        <div class="rc-head-text">
+          <span class="rc-eyebrow">Remote control</span>
+          <h1 id="rc-title">Not connected</h1>
+        </div>
+        <span id="rc-status" class="rc-status" role="status">Waiting…</span>
+      </header>
+      <div class="rc-bar" aria-hidden="true"><div id="rc-progress"></div></div>
+
+      <div id="rc-offline" class="rc-offline">
+        <h2 id="rc-offline-title">Connect to a prompter</h2>
+        <p id="rc-offline-msg"></p>
+        <form id="rc-join" class="rc-join" autocomplete="off">
+          <input id="rc-join-code" class="rc-join-code" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="7" placeholder="K7P 3QX" aria-label="Room code">
+          <button class="btn primary lg" type="submit">Connect</button>
+        </form>
+        <p id="rc-join-error" class="rc-join-error" role="alert" hidden>That doesn’t look like a room code. It’s 6 letters and numbers.</p>
+        <button id="rc-open" class="btn primary lg" data-cmd="open" type="button" hidden><span data-ri="play"></span>Start prompting</button>
+      </div>
+
+      <div id="rc-room" class="rc-room" hidden>
+        <span>Room <b id="rc-room-code"></b></span>
+        <button id="rc-change" class="rc-link" type="button">Use another code</button>
+      </div>
+
+      <div id="rc-controls" class="rc-controls" hidden>
+        <div class="rc-card">
+          <div class="rc-seg" role="radiogroup" aria-label="Scroll mode">
+            <button data-cmd="mode" data-value="voice" role="radio" type="button">Voice</button>
+            <button data-cmd="mode" data-value="auto" role="radio" type="button">Auto</button>
+            <button data-cmd="mode" data-value="manual" role="radio" type="button">Manual</button>
+          </div>
+          <button id="rc-toggle" class="rc-btn rc-primary" data-cmd="toggle" type="button"><span id="rc-toggle-icon"></span><span id="rc-toggle-label">Start</span></button>
+          <div class="rc-grid">
+            <button class="rc-btn" data-cmd="back" type="button" aria-label="Scroll back"><span data-ri="up"></span>Back</button>
+            <button class="rc-btn" data-cmd="top" type="button" aria-label="Restart from the top"><span data-ri="restart"></span>Top</button>
+            <button class="rc-btn" data-cmd="forward" type="button" aria-label="Scroll ahead"><span data-ri="down"></span>Ahead</button>
+          </div>
+        </div>
+
+        <div class="rc-card">
+          <p class="rc-card-title">Speed</p>
+          <div class="rc-stepper">
+            <button class="rc-btn" data-cmd="slower" type="button" aria-label="Slower"><span data-ri="minus"></span></button>
+            <div class="rc-readout"><b id="rc-speed">5</b><span>Auto-scroll</span></div>
+            <button class="rc-btn" data-cmd="faster" type="button" aria-label="Faster"><span data-ri="plus"></span></button>
+          </div>
+          <p class="rc-card-title">Text size</p>
+          <div class="rc-stepper">
+            <button class="rc-btn rc-a-sm" data-cmd="smaller" type="button" aria-label="Smaller text">A</button>
+            <div class="rc-readout"><b id="rc-size">52</b><span>px</span></div>
+            <button class="rc-btn rc-a-lg" data-cmd="bigger" type="button" aria-label="Larger text">A</button>
+          </div>
+        </div>
+
+        <div class="rc-row2">
+          <button class="rc-btn rc-small" data-cmd="mirror" type="button"><span data-ri="mirror"></span>Mirror</button>
+          <button id="rc-record" class="rc-btn rc-small rc-rec" data-cmd="record" type="button"><span data-ri="record"></span><span id="rc-record-label">Record</span></button>
+        </div>
+      </div>
+
+      <p class="rc-foot">Only the title, speed and progress reach this remote, never the script.</p>
+    </div>
+  </section>
+
   <dialog id="remote-dialog" class="dialog remote-dialog" aria-labelledby="remote-title">
     <form method="dialog">
       <h2 id="remote-title">Pair a phone or tablet</h2>
-      <p>Scan the QR code with the phone’s camera to connect straight away. Typing the room code works too, but you’ll be asked to allow it here.</p>
+      <p>Scan the QR code with the phone’s camera to connect straight away. Or open OpenCue on the phone, tap Remote and type the room code; you’ll be asked to allow it here.</p>
       <div class="pair">
         <div id="remote-qr" class="qr" role="img" aria-label="QR code that opens the remote"></div>
         <div class="pair-info">
@@ -227,6 +299,7 @@
   <script src="js/vendor/peerjs.min.js"></script>
   <script src="js/vendor/qrcode.js"></script>
   <script src="js/link.js"></script>
+  <script src="js/remote.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

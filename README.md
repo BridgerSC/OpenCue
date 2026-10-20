@@ -8,6 +8,7 @@ No accounts, no build step and no server. Your scripts stay in your browser's lo
 
 - **Voice tracking.** OpenCue listens while you read and keeps your current line on the eyeline. Pause and it waits for you. Skip ahead or go back and it catches up. Words you've already said are dimmed and the last one you said is highlighted.
 - **Auto-scroll** at an adjustable speed, plus a **manual** mode for an operator (mouse wheel, touch drag, arrow keys).
+- **Everything in one window.** The prompter is the home screen. **Scripts** (top left) slides in your library, where each script has **Edit**, which opens a clean editor in a pop-up, and **Present**.
 - **Script library** with search, autosave, word count and an estimated reading time. You can import `.txt`/`.md` files, export scripts, and back up or restore everything as JSON.
 - **Simple markup:** `[stage directions]` are shown but not read, `# Headings` mark sections, and `*emphasis*` highlights words. A small toolbar above the editor inserts or wraps each of these at the cursor (`Ctrl+B` for emphasis).
 - **Display options:** text size, line-height presets, script width, horizontal position, font, alignment, ALL CAPS, colors and presets, and an eyeline with an adjustable position and color.
@@ -15,7 +16,7 @@ No accounts, no build step and no server. Your scripts stay in your browser's lo
 - **Camera preview and recording**, as a small preview or behind the text. Pick the camera and microphone in Settings, and use "Check devices" for a live preview and a mic level meter. Takes are saved to your downloads as `.webm` or `.mp4`.
 - **Floating control bar** with Start/Pause, restart, a mode switcher, a speed stepper in Auto mode, a Layout popover and a progress track. It hides while you're running and comes back when you move the mouse.
 - **Searchable settings drawer** grouped into collapsible sections: Scrolling, Typography, Layout, Display, Camera & mic, Voice, Behavior and Keyboard shortcuts.
-- **Phone or tablet remote.** Pair it by QR code (joins straight away) or by a 6-character room code (the presenter taps Allow). It also works as a second window on the same computer. Remotes get status only, never the script.
+- **Phone or tablet remote, built in.** Press **Remote** in the prompter's bar and scan the QR code; the phone opens OpenCue's Remote tab already paired. Or, on the phone, open **Scripts**, then **Use this device as a remote**, and type the 6-character room code, and the presenter taps Allow. The same tab also works as a second window on the same computer. Remotes get status only, never the script.
 - **Installable app** on Mac, Windows, iPad and iPhone (it's a PWA). The installed app opens offline.
 - A countdown, a timer, fullscreen, and a screen wake lock.
 - Click any word to jump there.
@@ -54,9 +55,9 @@ Then open <http://localhost:8000>. To host it publicly, any static host works (G
 | `C` / `R` | Camera / record |
 | `F` | Fullscreen |
 | `S` | Settings |
-| `Esc` | Close a menu or Settings, otherwise back to editor |
+| `Esc` | Close a menu, Settings, the Scripts panel or the editor |
 
-In the editor, `Ctrl+Enter` (`⌘+Enter` on a Mac) starts prompting and `Ctrl+B` (`⌘+B`) wraps the selection in `*emphasis*`. Hover any control in the prompter to see its shortcut.
+In the editor, `Ctrl+Enter` (`⌘+Enter` on a Mac) presents the script and `Ctrl+B` (`⌘+B`) wraps the selection in `*emphasis*`. Hover any control in the prompter to see its shortcut.
 
 ## Browser support
 
@@ -119,7 +120,6 @@ To watch a session drive the real app, serve the folder over `http://localhost` 
 
 ```
 index.html        app shell
-remote.html       remote-control page (phone/tablet by room code, or another window)
 manifest.webmanifest, sw.js, icons/   install-as-an-app support and offline cache
 css/style.css     all styles, built on the design tokens at the top of the file
 css/fonts/        self-hosted Inter (variable woff2) and its OFL license
@@ -129,7 +129,7 @@ js/voice.js       Web Speech API wrapper with auto-restart
 js/prompter.js    the scrolling display
 js/app.js         editor, settings, playback, camera, remote, shortcuts
 js/link.js        remote link: room codes, pairing, message checks (shared by both pages)
-js/remote.js      the remote page's controls
+js/remote.js      the Remote tab (phone/tablet by room code or QR, or another window)
 js/vendor/        PeerJS and qrcode-generator, copied unmodified (see its README)
 tools/make-upload.js   copies just the files the live site needs into upload/
 test/             unit tests, speech replay tests and fixtures, live-replay page

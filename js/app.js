@@ -86,6 +86,7 @@
     archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/>',
     trash: '<path d="M4 7h16M10 11v6M14 11v6M9 7V4.5h6V7M6 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    edit: '<path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z"/><path d="M13.5 8.5l3 3"/>',
     file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     text: '<path d="M4 6h16M4 10h11M4 14h16M4 18h9"/>',
@@ -224,7 +225,7 @@
   const WELCOME = `# Welcome
 Welcome to OpenCue, a free and open-source teleprompter. [smile]
 
-This script is just text. Edit it here, then press Present or hit Ctrl+Enter.
+Press Start at the bottom to try it out. To use your own script, open Scripts at the top left and choose New script, or Edit on any script.
 
 # Voice tracking
 In Voice mode, OpenCue listens while you read and scrolls to keep your place. Pause whenever you like and it waits for you. Skip a line and it catches up.
@@ -289,7 +290,12 @@ Good luck with your recording!`;
 
   // ---------------------------------------------------------------- editor
 
-  const editorView = $('#editor-view');
+  // The prompter is the home screen. currentId is the script on it; the pop-up
+  // editor works on editingId, which can be any script.
+  const editorPanel = $('#editor-panel');
+  let editingId = null;
+  let prompterStale = false; // the on-screen script was edited; reload it when the editor closes
+  const editing = () => scripts.find((s) => s.id === editingId);
   const titleInput = $('#script-title');
   const bodyInput = $('#script-body');
   const listEl = $('#script-list');
@@ -336,11 +342,16 @@ Good luck with your recording!`;
     listEl.replaceChildren(...shown.map((s) => {
       const n = wordCount(s.body);
       const active = s.id === currentId;
-      const title = s.title.trim();
-      return h('li', null, h('button', { class: 'script-item' + (active ? ' active' : ''), 'aria-current': active ? 'true' : null, dataset: { id: s.id } },
-        h('span', { class: 'si-title' + (title ? '' : ' untitled'), text: title || 'Untitled script' }),
+      const title = s.title.trim() || 'Untitled script';
+      return h('li', null, h('div', { class: 'script-item' + (active ? ' active' : ''), 'aria-current': active ? 'true' : null, dataset: { id: s.id } },
+        h('span', { class: 'si-top' },
+          h('span', { class: 'si-title' + (s.title.trim() ? '' : ' untitled'), text: title }),
+          active ? h('span', { class: 'si-badge', text: 'On screen' }) : null),
         h('span', { class: 'si-snippet', text: snippet(s.body) }),
-        h('span', { class: 'si-meta' }, h('span', { text: `${plural(n, 'word')} · ${fmtDuration((n / WPM) * 60)}` }), h('span', { text: relTime(s.updated) }))));
+        h('span', { class: 'si-meta' }, h('span', { text: `${plural(n, 'word')} · ${fmtDuration((n / WPM) * 60)}` }), h('span', { text: relTime(s.updated) })),
+        h('span', { class: 'si-actions' },
+          h('button', { type: 'button', class: 'btn small', 'aria-label': `Edit ${title}`, dataset: { act: 'edit' }, html: icon('edit') + '<span class="label">Edit</span>' }),
+          h('button', { type: 'button', class: 'btn small primary', 'aria-label': `Present ${title}`, dataset: { act: 'present' }, html: icon('play') + '<span class="label">Present</span>' }))));
     }));
     $('#list-empty').hidden = shown.length > 0;
     $('#list-empty-q').textContent = `“${searchInput.value.trim()}”`;
@@ -356,34 +367,73 @@ Good luck with your recording!`;
     $('#editor-empty').hidden = !empty;
   }
 
-  function selectScript(id) {
-    currentId = id;
-    const s = current();
+  const isEditorOpen = () => !editorPanel.hidden;
+
+  // Open the pop-up editor on any script.
+  function editScript(id, { focusTitle = false } = {}) {
+    if (!scripts.some((s) => s.id === id)) return;
+    pause();
+    editingId = id;
+    const s = editing();
     titleInput.value = s.title;
     bodyInput.value = s.body;
     updateStats();
-    renderList();
-    persist();
     setSidebar(false);
+    hideTip();
+    editorPanel.hidden = false;
+    document.body.classList.add('editor-open');
+    $('#editor-wrap').scrollTop = 0;
+    (focusTitle ? titleInput : bodyInput).focus({ preventScroll: true });
+    if (!focusTitle) bodyInput.setSelectionRange(0, 0);
+    broadcastState();
+  }
+
+  function closeEditor() {
+    if (!isEditorOpen()) return;
+    persistNow();
+    editorPanel.hidden = true;
+    document.body.classList.remove('editor-open');
+    hideTip();
+    editingId = null;
+    if (prompterStale) loadIntoPrompter({ keepPlace: true });
+    renderList();
+    broadcastState();
+  }
+
+  // Put a script on the prompter (and close anything covering it).
+  function presentScript(id) {
+    if (!scripts.some((s) => s.id === id)) return;
+    currentId = id;
+    persistNow();
+    if (isEditorOpen()) { prompterStale = false; closeEditor(); }
+    setSidebar(false);
+    loadIntoPrompter();
+    renderList();
   }
 
   let listTimer = 0;
   function touch() {
-    current().updated = Date.now();
+    editing().updated = Date.now();
+    if (editingId === currentId) prompterStale = true;
     persist();
     clearTimeout(listTimer);
     listTimer = setTimeout(renderList, 250);
   }
 
-  titleInput.addEventListener('input', () => { current().title = titleInput.value; touch(); });
+  titleInput.addEventListener('input', () => { editing().title = titleInput.value; touch(); });
   titleInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); bodyInput.focus(); }
   });
-  bodyInput.addEventListener('input', () => { current().body = bodyInput.value; updateStats(); touch(); });
+  bodyInput.addEventListener('input', () => { editing().body = bodyInput.value; updateStats(); touch(); });
   listEl.addEventListener('click', (e) => {
-    const b = e.target.closest('.script-item');
-    if (b) selectScript(b.dataset.id);
+    const b = e.target.closest('[data-act]');
+    const card = e.target.closest('.script-item');
+    if (!b || !card) return;
+    if (b.dataset.act === 'edit') editScript(card.dataset.id);
+    else presentScript(card.dataset.id);
   });
+  $('#editor-done').addEventListener('click', closeEditor);
+  $('#start-btn').addEventListener('click', () => presentScript(editingId));
   searchInput.addEventListener('input', renderList);
   searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape' && searchInput.value) { e.stopPropagation(); } });
   $('#clear-search').addEventListener('click', () => { searchInput.value = ''; renderList(); searchInput.focus(); });
@@ -392,12 +442,12 @@ Good luck with your recording!`;
     const s = makeScript('', '');
     scripts.push(s);
     searchInput.value = '';
-    selectScript(s.id);
-    titleInput.focus();
+    renderList();
+    editScript(s.id, { focusTitle: true });
   });
 
   $('#delete-btn').addEventListener('click', async () => {
-    const s = current();
+    const s = editing();
     const ok = await confirmDialog({
       title: 'Delete this script?',
       message: `“${s.title.trim() || 'Untitled script'}” will be removed from this browser. This can’t be undone.`,
@@ -405,18 +455,30 @@ Good luck with your recording!`;
     });
     if (!ok) return;
     scripts = scripts.filter((x) => x.id !== s.id);
-    if (!scripts.length) scripts.push(makeScript('', ''));
-    selectScript(scripts.slice().sort((a, b) => b.updated - a.updated)[0].id);
+    if (!scripts.length) scripts.push(makeScript('Welcome to OpenCue', WELCOME));
+    const wasOnScreen = s.id === currentId;
+    // Point the prompter at a script that still exists before anything reads it.
+    if (wasOnScreen) currentId = scripts.slice().sort((a, b) => b.updated - a.updated)[0].id;
+    prompterStale = false;
+    closeEditor();
+    if (wasOnScreen) loadIntoPrompter();
     persistNow();
+    renderList();
     toast('Script deleted');
   });
 
-  // ---- mobile library drawer
+  // ---- the Scripts panel (slides in from the left over the prompter)
+  const isSidebarOpen = () => document.body.classList.contains('sidebar-open');
   function setSidebar(open) {
     document.body.classList.toggle('sidebar-open', open);
-    $('#sidebar-toggle').setAttribute('aria-expanded', String(open));
+    $('#tb-library').setAttribute('aria-expanded', String(open));
+    if (open) {
+      renderList();
+      hideTip();
+      showControls();
+    }
   }
-  $('#sidebar-toggle').addEventListener('click', () => setSidebar(!document.body.classList.contains('sidebar-open')));
+  $('#tb-library').addEventListener('click', () => setSidebar(!isSidebarOpen()));
   $('#sidebar-close').addEventListener('click', () => setSidebar(false));
   $('#scrim').addEventListener('click', () => setSidebar(false));
 
@@ -513,7 +575,7 @@ Good luck with your recording!`;
   const stamp = () => new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
 
   $('#export-btn').addEventListener('click', () => {
-    const s = current();
+    const s = editing();
     download(new Blob([s.body], { type: 'text/plain;charset=utf-8' }), `${slug(s.title)}.txt`);
   });
 
@@ -560,9 +622,10 @@ Good luck with your recording!`;
     importFile.value = '';
     if (added) {
       searchInput.value = '';
-      selectScript(lastId && scripts.some((s) => s.id === lastId) ? lastId : scripts[scripts.length - 1].id);
       persistNow();
-      toast(`Imported ${plural(added, 'script')}`);
+      if (isEditorOpen()) closeEditor();
+      setSidebar(true);
+      toast(`Imported ${plural(added, 'script')}. Use Present or Edit on it below.`, 4000);
     }
   });
 
@@ -607,51 +670,29 @@ Good luck with your recording!`;
     },
   });
 
-  function openPrompter() {
-    persistNow();
-    hideTip();
-    editorView.hidden = true;
-    prompterView.hidden = false;
-    document.body.classList.add('prompter-open');
-    applySettings();
+  // Show the current script on the prompter. keepPlace: it's the same script,
+  // just edited, so stay at the same word instead of going back to the top.
+  function loadIntoPrompter({ keepPlace = false } = {}) {
+    prompterStale = false;
+    pause();
+    const anchor = keepPlace ? prompter.wordAtEyeline() : -1;
     prompter.load(parse(current().body));
     prompter.setMode(settings.mode);
+    if (anchor > 0) {
+      prompter.jumpTo(Math.min(anchor, prompter.wordEls.length - 1));
+      prompter.offset = prompter.target; // jump there, don't scroll from the top
+    }
     const title = current().title.trim() || 'Untitled script';
     $('#prompter-title').textContent = title;
-    $('#tb-back').setAttribute('aria-label', `Back to editor: ${title}`);
-    needsCountdown = true;
-    elapsed = 0;
+    $('#tb-library').setAttribute('aria-label', `Scripts. On screen: ${title}`);
+    if (!keepPlace) {
+      needsCountdown = true;
+      elapsed = 0;
+    }
     updateTimer();
     updatePlayUI();
     showControls();
-    requestWakeLock();
     broadcastState();
-    playBtn.focus({ preventScroll: true });
-  }
-
-  async function closePrompter() {
-    if (recorder) {
-      const ok = await confirmDialog({
-        title: 'Stop recording?',
-        message: 'Leaving the prompter stops the recording. The take will be saved to your downloads.',
-        confirm: 'Stop and leave',
-        cancel: 'Keep recording',
-        danger: false,
-      });
-      if (!ok) return;
-    }
-    pause();
-    stopRecording();
-    stopCamera();
-    closeSettings();
-    closePops();
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    releaseWakeLock();
-    prompterView.hidden = true;
-    editorView.hidden = false;
-    document.body.classList.remove('prompter-open', 'chrome-hidden');
-    broadcastState();
-    bodyInput.focus();
   }
 
   // Voice mode streams microphone audio to the browser vendor's speech service
@@ -1047,7 +1088,7 @@ Good luck with your recording!`;
     ['Camera / record', ['C', 'R']],
     ['Fullscreen', ['F']],
     ['Settings', ['S']],
-    ['Close / back to editor', ['Esc']],
+    ['Close a menu, Settings, Scripts or the editor', ['Esc']],
   ];
 
   // ---- camera & mic section pieces (wired up further down)
@@ -1376,8 +1417,6 @@ Good luck with your recording!`;
 
   // ---- toolbar wiring
 
-  $('#start-btn').addEventListener('click', openPrompter);
-  $('#tb-back').addEventListener('click', closePrompter);
   playBtn.addEventListener('click', () => {
     if (playBtn.getAttribute('aria-disabled') === 'true') return;
     togglePlay();
@@ -1392,9 +1431,55 @@ Good luck with your recording!`;
   $('#tb-settings').addEventListener('click', () => toggleSettings());
   $('#settings-close').addEventListener('click', closeSettings);
 
+  // A remote in another window of this browser (e.g. for an operator's screen): OpenCue's own Remote tab.
   function openRemote() {
-    window.open('remote.html', 'opencue-remote', 'width=400,height=720');
+    window.open(new URL('./#remote', location.href).href, 'opencue-remote', 'width=420,height=780');
   }
+
+  // ---------------------------------------------------------------- the Remote tab
+
+  // #remote = control a prompter in another window of this browser;
+  // #remote=K7P3QX.<secret> = paired with a prompter on another device (the QR link).
+  const remoteView = $('#remote-view');
+
+  function openRemoteView(room) {
+    if (recorder) { toast('Stop recording before switching to the remote.', 4000, 'warn'); return; }
+    pause();
+    setSidebar(false);
+    closeEditor();
+    closeSettings();
+    prompterView.hidden = true;
+    remoteView.hidden = false;
+    document.title = 'OpenCue Remote';
+    window.OpenCueRemote.open(room);
+    broadcastState();
+  }
+
+  function closeRemoteView() {
+    window.OpenCueRemote.close();
+    remoteView.hidden = true;
+    prompterView.hidden = false;
+    document.title = 'OpenCue Teleprompter';
+    history.replaceState(null, '', location.pathname + location.search);
+    prompter.layout();
+    showControls();
+  }
+
+  function routeFromHash() {
+    const m = /^#remote(?:=(.*))?$/.exec(location.hash);
+    if (!m) return;
+    let value = m[1] || '';
+    try { value = decodeURIComponent(value); } catch (_) { value = ''; }
+    openRemoteView(value ? window.OpenCueLink.parseRoom(value) : null);
+  }
+  window.addEventListener('hashchange', routeFromHash);
+
+  $('#remote-tab-btn').addEventListener('click', () => {
+    history.replaceState(null, '', '#remote');
+    openRemoteView(null);
+  });
+  $('#rc-back').addEventListener('click', closeRemoteView);
+  $('#tb-remote').addEventListener('click', () => openPhoneRemote());
 
   function toggleMirror() {
     settings.mirrorX = !settings.mirrorX;
@@ -1680,8 +1765,10 @@ Good luck with your recording!`;
     if (wakeLock) wakeLock.release().catch(() => {});
     wakeLock = null;
   }
+  // Keep the screen awake while OpenCue is in front: it's always either a prompter
+  // or a remote, and neither should go to sleep mid-shoot.
   document.addEventListener('visibilitychange', () => {
-    if (!prompterView.hidden && document.visibilityState === 'visible') requestWakeLock();
+    if (document.visibilityState === 'visible') requestWakeLock();
   });
 
   // ---------------------------------------------------------------- remote control
@@ -1689,9 +1776,10 @@ Good luck with your recording!`;
   // Commands arrive already checked against a fixed list (js/link.js). Remotes only
   // get status below, never the script text.
   function handleRemote(m) {
+    if (!remoteView.hidden) return; // this window is being used as a remote, not as a prompter
     if (m.cmd === 'hello') return broadcastState();
-    if (m.cmd === 'open') return prompterView.hidden && openPrompter();
-    if (prompterView.hidden) return;
+    if (m.cmd === 'open') { closeEditor(); setSidebar(false); return broadcastState(); }
+    if (isEditorOpen()) return; // someone is editing here; don't scroll under them
     showControls();
     switch (m.cmd) {
       case 'toggle': togglePlay(); break;
@@ -1733,17 +1821,17 @@ Good luck with your recording!`;
   function broadcastState() {
     link.send({
       type: 'state',
-      active: !prompterView.hidden,
+      active: remoteView.hidden && !isEditorOpen(),
       playing: playing || !!countdownTimer,
       mode: settings.mode,
       speed: settings.speed,
       fontSize: settings.fontSize,
       progress: prompter.progressRatio(),
-      title: current().title.trim() || 'Untitled script',
+      title: (current() && current().title.trim()) || 'Untitled script',
       recording: !!recorder,
     });
   }
-  setInterval(() => { if (!prompterView.hidden || link.remotes) broadcastState(); }, 500);
+  setInterval(() => { if (remoteView.hidden) broadcastState(); }, 500);
 
   // ---- phone / tablet remote dialog
 
@@ -1818,9 +1906,17 @@ Good luck with your recording!`;
 
   document.addEventListener('keydown', (e) => {
     if (dlg.open) return;
-    if (prompterView.hidden) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); openPrompter(); }
-      else if (e.key === 'Escape' && document.body.classList.contains('sidebar-open')) setSidebar(false);
+    if (!remoteView.hidden) {
+      if (e.key === 'Escape' && !(e.target instanceof Element && e.target.closest('input'))) closeRemoteView();
+      return;
+    }
+    if (isEditorOpen()) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); presentScript(editingId); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
+      return;
+    }
+    if (isSidebarOpen()) {
+      if (e.key === 'Escape') { e.preventDefault(); setSidebar(false); $('#tb-library').focus({ preventScroll: true }); }
       return;
     }
     const target = e.target instanceof Element ? e.target : null;
@@ -1830,7 +1926,6 @@ Good luck with your recording!`;
       e.preventDefault();
       if (openPop) closePops({ focus: true });
       else if (isSettingsOpen()) closeSettings();
-      else closePrompter();
       return;
     }
     if ((target && target.closest('input, select, textarea, .drawer, .popover, .menu')) || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1908,8 +2003,12 @@ Good luck with your recording!`;
 
   buildSettings();
   applySettings();
-  selectScript(currentId);
+  document.body.classList.add('prompter-open');
+  loadIntoPrompter();
+  renderList();
   updateCamUI();
   updatePlayUI();
-  setInterval(() => { if (!editorView.hidden && document.visibilityState === 'visible') renderList(); }, 60000);
+  requestWakeLock();
+  routeFromHash(); // a QR link or #remote opens straight into the Remote tab
+  setInterval(() => { if (isSidebarOpen() && document.visibilityState === 'visible') renderList(); }, 60000);
 })();

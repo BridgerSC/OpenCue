@@ -1,4 +1,4 @@
-/* OpenCue — remote-control link between the prompter and remote.html.
+/* OpenCue — remote-control link between the prompter and the Remote tab (js/remote.js).
  *
  * Two transports carry the same small messages:
  *   - Same computer: a BroadcastChannel between windows of one browser. No network.
@@ -54,9 +54,9 @@
   }
   const formatCode = (code) => (code ? `${code.slice(0, 3)} ${code.slice(3)}` : '');
 
-  // "K7P3QX.secret" from a remote link's #hash -> { code, secret|null }, or null.
-  function parseRoom(hash) {
-    const [c, s] = String(hash || '').replace(/^#/, '').split('.');
+  // "K7P3QX.secret" (from a remote link's #remote=…) -> { code, secret|null }, or null.
+  function parseRoom(value) {
+    const [c, s] = String(value || '').replace(/^#?(remote=)?/, '').split('.');
     const code = cleanCode(c);
     return code ? { code, secret: cleanSecret(s) } : null;
   }
@@ -124,7 +124,8 @@
     }
 
     get remotes() { return this.conns.size; }
-    get remoteUrl() { return this.code ? `${new URL('remote.html', root.location.href).href}#${this.code}.${this.secret}` : ''; }
+    // Opens OpenCue's Remote tab, already paired: https://…/opencue/#remote=K7P3QX.<secret>
+    get remoteUrl() { return this.code ? `${new URL('./', root.location.href).href}#remote=${this.code}.${this.secret}` : ''; }
 
     // Restart a room this tab already had (after a reload), so paired phones reconnect.
     resume() {
@@ -325,6 +326,19 @@
       if (!cleanCommand(msg)) return;
       if (this.conn && this.conn.open) this.conn.send(msg);
       else if (this.channel) this.channel.postMessage(msg);
+    }
+
+    // Leaving the Remote tab: drop every connection and stop retrying.
+    destroy() {
+      this.denied = true; // stops the retry loops
+      clearTimeout(this.timer);
+      if (this.conn) closeQuietly(this.conn);
+      this.conn = null;
+      if (this.peer) { try { this.peer.destroy(); } catch (_) { /* already destroyed */ } }
+      this.peer = null;
+      if (this.channel) { this.channel.close(); this.channel = null; }
+      this.onState = () => {};
+      this.onStatus = () => {};
     }
   }
 
