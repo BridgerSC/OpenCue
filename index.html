@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="OpenCue is a free, open-source teleprompter with voice-tracked scrolling, mirror mode and camera recording.">
+  <meta name="theme-color" content="#0b0b0e">
+  <!-- Only OpenCue's own files may run. The one outside connection allowed is the
+       pairing service for the phone remote (js/link.js). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; font-src 'self'; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>OpenCue Teleprompter</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Cpath d='M9 11h14M9 16h9M9 21h12' stroke='white' stroke-width='2.75' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-title" content="OpenCue">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ============================================================ Editor -->
+  <section id="editor-view" class="editor-view">
+    <aside id="sidebar" class="sidebar" aria-label="Script library">
+      <div class="sidebar-head">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M9 11h14M9 16h9M9 21h12"/></svg>
+          <span>OpenCue</span>
+        </div>
+        <button id="sidebar-close" class="icon-btn mobile-only" data-icon="close" aria-label="Close library"></button>
+      </div>
+      <button id="new-script" class="btn primary block" data-icon="plus"><span class="label">New script</span></button>
+      <label class="search-field">
+        <span class="search-icon" data-icon="search"></span>
+        <input id="script-search" type="search" placeholder="Search scripts" aria-label="Search scripts" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="list-head"><span>Scripts</span><span id="script-count" class="count">0</span></div>
+      <ul id="script-list" class="script-list" aria-label="Scripts"></ul>
+      <div id="list-empty" class="list-empty" hidden>
+        <p>No scripts match <span id="list-empty-q"></span></p>
+        <button id="clear-search" class="btn ghost small">Clear search</button>
+      </div>
+      <button id="install-btn" class="btn block install-btn" data-icon="download" hidden><span class="label">Install OpenCue as an app</span></button>
+      <div class="sidebar-foot">
+        <button id="import-btn" class="btn ghost small" data-icon="upload" data-tip="Import .txt, .md or an OpenCue backup"><span class="label">Import</span></button>
+        <button id="backup-btn" class="btn ghost small" data-icon="archive" data-tip="Download all scripts as a JSON backup"><span class="label">Backup</span></button>
+        <input type="file" id="import-file" accept=".txt,.md,.markdown,.json,text/plain,application/json" multiple hidden>
+      </div>
+    </aside>
+    <div id="scrim" class="scrim" aria-hidden="true"></div>
+
+    <main class="editor-main">
+      <header class="editor-head">
+        <button id="sidebar-toggle" class="icon-btn mobile-only" data-icon="menu" aria-label="Show scripts" aria-controls="sidebar" aria-expanded="false"></button>
+        <div class="head-main">
+          <input id="script-title" class="title-input" placeholder="Untitled script" aria-label="Script title" autocomplete="off">
+          <div class="chips">
+            <span class="chip" data-icon="text"><span id="stat-words">0 words</span></span>
+            <span class="chip" data-icon="clock"><span id="stat-time">0s read</span></span>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button id="export-btn" class="icon-btn" data-icon="download" aria-label="Export as .txt" data-tip="Export as .txt"></button>
+          <button id="delete-btn" class="icon-btn danger" data-icon="trash" aria-label="Delete script" data-tip="Delete script"></button>
+          <button id="start-btn" class="btn primary lg" data-icon="play" data-tip="Present" data-kbd="Ctrl+Enter"><span class="label">Present</span></button>
+        </div>
+      </header>
+
+      <div id="editor-wrap" class="editor-wrap">
+        <div class="page">
+          <div class="format-bar" role="toolbar" aria-label="Formatting">
+            <button class="fmt-btn" data-fmt="cue" data-tip="Stage cue: shown, never read aloud"><span class="glyph" aria-hidden="true">[ ]</span><span class="label">Cue</span></button>
+            <button class="fmt-btn" data-fmt="heading" data-tip="Section heading"><span class="glyph" aria-hidden="true">#</span><span class="label">Heading</span></button>
+            <button class="fmt-btn" data-fmt="emphasis" data-tip="Emphasis" data-kbd="Ctrl+B"><span class="glyph" aria-hidden="true">*</span><span class="label">Emphasis</span></button>
+            <span class="fmt-hint">A blank line starts a new paragraph</span>
+          </div>
+          <textarea id="script-body" class="script-body" spellcheck="true" placeholder="Start writing, or paste your script here…" aria-label="Script"></textarea>
+          <div id="editor-empty" class="empty-state" hidden>
+            <span class="empty-icon" data-icon="file"></span>
+            <h3>This script is empty</h3>
+            <p>Type or paste your script above, or import a <code>.txt</code> or <code>.md</code> file.</p>
+            <button id="empty-import" class="btn small" data-icon="upload"><span class="label">Import a file</span></button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="editor-foot">
+        <span class="saved"><span class="saved-dot" aria-hidden="true"></span>Saved in this browser</span>
+        <span class="hint"><code>[cue]</code> not read aloud · <code># Heading</code> · <code>*emphasis*</code></span>
+      </footer>
+    </main>
+  </section>
+
+  <!-- ========================================================= Prompter -->
+  <section id="prompter-view" class="prompter-view" hidden>
+    <div id="stage" class="stage">
+      <div id="camera-wrap" class="camera-wrap">
+        <video id="camera" muted playsinline autoplay></video>
+        <div id="rec-badge" class="rec-badge" hidden><span class="rec-dot" aria-hidden="true"></span><span id="rec-time">REC 00:00</span></div>
+      </div>
+      <div id="mirror" class="mirror">
+        <div id="text" class="text"></div>
+        <div id="fade" class="fade"></div>
+        <div id="eyeline" class="eyeline"></div>
+      </div>
+      <div id="voice-pill" class="voice-pill" hidden>
+        <span class="dot" aria-hidden="true"></span><span>Listening</span><span id="heard" class="heard"></span>
+      </div>
+      <div id="countdown" class="countdown" hidden>
+        <div class="cd-ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="cd-track" cx="60" cy="60" r="54"/><circle class="cd-arc" cx="60" cy="60" r="54"/></svg>
+          <span id="countdown-num" class="cd-num"></span>
+        </div>
+        <span class="cd-label">Get ready</span>
+      </div>
+    </div>
+
+    <div class="topbar chrome">
+      <button id="tb-back" class="float-btn" data-icon="back" aria-label="Back to editor" data-tip="Back to editor" data-kbd="Esc"><span id="prompter-title" class="label"></span></button>
+    </div>
+
+    <div id="dock" class="dock chrome">
+      <div id="progress" class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
+      <div id="toolbar" class="toolbar" role="toolbar" aria-label="Prompter controls">
+        <div class="tb-left">
+          <button id="tb-play" class="btn primary lg play" data-icon="play" data-tip="Start" data-kbd="Space"><span class="label">Start</span></button>
+          <button id="tb-top" class="tb-btn outline" data-icon="restart" aria-label="Restart from the top" data-tip="Restart from the top" data-kbd="Home"></button>
+          <span id="timer" class="timer" role="timer" aria-label="Elapsed time">00:00</span>
+        </div>
+
+        <div class="tb-center">
+          <div class="anchor">
+            <button id="mode-btn" class="mode-pill" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu" data-tip="Scroll mode">
+              <span id="mode-icon" class="mode-icon" aria-hidden="true"></span><span id="mode-label" class="label">Voice</span><span class="chev" data-icon="chevron-down"></span>
+            </button>
+            <div id="mode-menu" class="menu" role="menu" aria-label="Scroll mode" hidden>
+              <button role="menuitemradio" data-mode="voice" data-icon="mic"><span class="mi-text"><span class="mi-name">Voice</span><span class="mi-desc">Follows your speech as you read</span></span></button>
+              <button role="menuitemradio" data-mode="auto" data-icon="gauge"><span class="mi-text"><span class="mi-name">Auto</span><span class="mi-desc">Scrolls at a steady speed</span></span></button>
+              <button role="menuitemradio" data-mode="manual" data-icon="hand"><span class="mi-text"><span class="mi-name">Manual</span><span class="mi-desc">Wheel, touch or arrow keys</span></span></button>
+            </div>
+          </div>
+          <div id="speed-group" class="stepper speed" role="group" aria-label="Scroll speed">
+            <span class="stepper-cap">Speed</span>
+            <button id="tb-slower" data-icon="minus" aria-label="Slower" data-tip="Slower" data-kbd="↓"></button>
+            <input id="speed-val" class="stepper-val" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Scroll speed, 1 to 30" data-tip="Type a speed from 1 to 30" value="5">
+            <button id="tb-faster" data-icon="plus" aria-label="Faster" data-tip="Faster" data-kbd="↑"></button>
+          </div>
+        </div>
+
+        <div class="tb-right">
+          <button id="tb-camera" class="tb-btn labeled hide-narrow" data-icon="camera" aria-label="Camera" data-tip="Camera" data-kbd="C"><span class="label">Camera</span></button>
+          <button id="tb-record" class="tb-btn labeled hide-narrow" data-icon="record" aria-label="Record" data-tip="Record video" data-kbd="R"><span class="label">Record</span></button>
+          <div class="anchor hide-narrow">
+            <button id="tb-layout" class="tb-btn labeled" data-icon="layout" aria-label="Layout" aria-haspopup="dialog" aria-expanded="false" aria-controls="layout-pop" data-tip="Layout" data-kbd="[ ]"><span class="label">Layout</span></button>
+            <div id="layout-pop" class="popover" role="dialog" aria-label="Layout" hidden></div>
+          </div>
+          <button id="tb-mirror" class="tb-btn labeled hide-narrow" data-icon="mirror" aria-label="Mirror" aria-pressed="false" data-tip="Mirror for a teleprompter rig" data-kbd="M"><span class="label">Mirror</span></button>
+          <button id="tb-fullscreen" class="tb-btn labeled hide-narrow" data-icon="fullscreen" aria-label="Fullscreen" data-tip="Fullscreen" data-kbd="F"><span class="label">Fullscreen</span></button>
+          <button id="tb-settings" class="tb-btn labeled" data-icon="settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel" data-tip="Settings" data-kbd="S"><span class="label">Settings</span></button>
+        </div>
+      </div>
+    </div>
+
+    <aside id="settings-panel" class="drawer" aria-label="Settings" inert>
+      <header class="drawer-head">
+        <h2>Settings</h2>
+        <button id="settings-close" class="icon-btn" data-icon="close" aria-label="Close settings" data-tip="Close" data-kbd="Esc"></button>
+      </header>
+      <div class="drawer-search">
+        <label class="search-field">
+          <span class="search-icon" data-icon="search"></span>
+          <input id="settings-search" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <div id="settings-body" class="drawer-body"></div>
+      <footer class="drawer-foot">
+        <button id="reset-settings" class="btn ghost small" data-icon="restart"><span class="label">Reset to defaults</span></button>
+      </footer>
+    </aside>
+  </section>
+
+  <dialog id="confirm" class="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-msg"></p>
+      <div class="dialog-actions">
+        <button id="confirm-cancel" class="btn" value="cancel">Cancel</button>
+        <button id="confirm-ok" class="btn danger" value="ok">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="remote-dialog" class="dialog remote-dialog" aria-labelledby="remote-title">
+    <form method="dialog">
+      <h2 id="remote-title">Pair a phone or tablet</h2>
+      <p>Scan the QR code with the phone’s camera to connect straight away. Typing the room code works too, but you’ll be asked to allow it here.</p>
+      <div class="pair">
+        <div id="remote-qr" class="qr" role="img" aria-label="QR code that opens the remote"></div>
+        <div class="pair-info">
+          <span class="pair-label">Room code</span>
+          <span id="remote-code" class="room-code">— — —</span>
+          <span id="remote-status" class="remote-status" role="status"></span>
+        </div>
+      </div>
+      <div class="remote-link-row">
+        <span id="remote-link" class="remote-link"></span>
+        <button type="button" id="remote-copy" class="btn small">Copy link</button>
+      </div>
+      <p id="remote-note" class="remote-note" hidden></p>
+      <p class="remote-privacy">Don’t show this window on a shared screen: the QR code lets anyone in. The remote only sees the title, speed and progress, never the script. New code disconnects every remote.</p>
+      <div class="dialog-actions">
+        <button type="button" id="remote-newcode" class="btn">New code</button>
+        <button type="button" id="remote-window" class="btn">Open on this computer</button>
+        <button id="remote-done" class="btn primary" value="close">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+  <script src="js/parser.js"></script>
+  <script src="js/tracker.js"></script>
+  <script src="js/voice.js"></script>
+  <script src="js/prompter.js"></script>
+  <script src="js/vendor/peerjs.min.js"></script>
+  <script src="js/vendor/qrcode.js"></script>
+  <script src="js/link.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
