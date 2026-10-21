@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="OpenCue is a free, open-source teleprompter with voice-tracked scrolling, mirror mode and camera recording.">
+  <meta name="description" content="OpenCue is a free, open-source teleprompter with voice-tracked scrolling, mirror mode and a phone remote.">
   <meta name="theme-color" content="#0b0b0e">
   <!-- Only OpenCue's own files may run. The one outside connection allowed is the
        pairing service for the phone remote (js/link.js). -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; font-src 'self'; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="no-referrer">
   <title>OpenCue Teleprompter</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Cpath d='M9 11h14M9 16h9M9 21h12' stroke='white' stroke-width='2.75' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -97,10 +97,6 @@
   <!-- ========================================================= Prompter -->
   <section id="prompter-view" class="prompter-view">
     <div id="stage" class="stage">
-      <div id="camera-wrap" class="camera-wrap">
-        <video id="camera" muted playsinline autoplay></video>
-        <div id="rec-badge" class="rec-badge" hidden><span class="rec-dot" aria-hidden="true"></span><span id="rec-time">REC 00:00</span></div>
-      </div>
       <div id="mirror" class="mirror">
         <div id="text" class="text"></div>
         <div id="fade" class="fade"></div>
@@ -151,8 +147,6 @@
         </div>
 
         <div class="tb-right">
-          <button id="tb-camera" class="tb-btn labeled hide-narrow" data-icon="camera" aria-label="Camera" data-tip="Camera" data-kbd="C"><span class="label">Camera</span></button>
-          <button id="tb-record" class="tb-btn labeled hide-narrow" data-icon="record" aria-label="Record" data-tip="Record video" data-kbd="R"><span class="label">Record</span></button>
           <div class="anchor hide-narrow">
             <button id="tb-layout" class="tb-btn labeled" data-icon="layout" aria-label="Layout" aria-haspopup="dialog" aria-expanded="false" aria-controls="layout-pop" data-tip="Layout" data-kbd="[ ]"><span class="label">Layout</span></button>
             <div id="layout-pop" class="popover" role="dialog" aria-label="Layout" hidden></div>
@@ -253,10 +247,7 @@
           </div>
         </div>
 
-        <div class="rc-row2">
-          <button class="rc-btn rc-small" data-cmd="mirror" type="button"><span data-ri="mirror"></span>Mirror</button>
-          <button id="rc-record" class="rc-btn rc-small rc-rec" data-cmd="record" type="button"><span data-ri="record"></span><span id="rc-record-label">Record</span></button>
-        </div>
+        <button class="rc-btn rc-small" data-cmd="mirror" type="button"><span data-ri="mirror"></span>Mirror</button>
       </div>
 
       <p class="rc-foot">Only the title, speed and progress reach this remote, never the script.</p>
@@ -266,7 +257,7 @@
   <dialog id="remote-dialog" class="dialog remote-dialog" aria-labelledby="remote-title">
     <form method="dialog">
       <h2 id="remote-title">Pair a phone or tablet</h2>
-      <p>Scan the QR code with the phone’s camera to connect straight away. Or open OpenCue on the phone, tap Remote and type the room code; you’ll be asked to allow it here.</p>
+      <p>Scan the QR code with the phone’s camera to connect straight away. Or open OpenCue on the phone, tap Scripts, then Use this device as a remote, and type the room code; you’ll be asked to allow it here.</p>
       <div class="pair">
         <div id="remote-qr" class="qr" role="img" aria-label="QR code that opens the remote"></div>
         <div class="pair-info">

@@ -4,7 +4,7 @@
  * are cached. Scripts are never here: they live in each browser's own storage. */
 'use strict';
 
-const CACHE = 'opencue-v2';
+const CACHE = 'opencue-v3';
 const APP_FILES = [
   './',
   'index.html',

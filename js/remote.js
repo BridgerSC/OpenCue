@@ -17,8 +17,6 @@
     minus: '<path d="M6 12h12"/>',
     plus: '<path d="M12 6v12M6 12h12"/>',
     mirror: '<path d="M12 3v18" stroke-dasharray="2 2.6"/><path d="M8.5 7.5L4 12l4.5 4.5z"/><path d="M15.5 7.5L20 12l-4.5 4.5z"/>',
-    record: '<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
-    stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>',
   };
   const svg = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
   document.querySelectorAll('#remote-view [data-ri]').forEach((el) => { el.outerHTML = svg(el.dataset.ri); });
@@ -89,10 +87,6 @@
     setToggle(s.playing);
     $('rc-speed').textContent = Math.round(s.speed * 10) / 10;
     $('rc-size').textContent = s.fontSize;
-    const rec = $('rc-record');
-    rec.classList.toggle('on', s.recording);
-    $('rc-record-label').textContent = s.recording ? 'Stop' : 'Record';
-    rec.querySelector('svg').outerHTML = svg(s.recording ? 'stop' : 'record');
     document.querySelectorAll('#rc-controls [data-cmd="mode"]').forEach((b) => {
       const on = b.dataset.value === s.mode;
       b.classList.toggle('on', on);

@@ -14,7 +14,7 @@
  * code (it's shown on screen) has to be allowed in on the prompter.
  *
  * Privacy: remotes only ever receive status (title, mode, speed, text size,
- * progress, playing, recording), never script text. Everything received is
+ * progress, playing), never script text. Everything received is
  * treated as untrusted: JSON only, checked against a fixed list, rate limited.
  */
 (function (root) {
@@ -25,7 +25,7 @@
   const PEER_PREFIX = 'opencue-v1-';
   const MAX_REMOTES = 4;
   const ROOM_KEY = 'opencue.room';                    // sessionStorage: survives a reload of this tab only
-  const COMMANDS = new Set(['hello', 'open', 'toggle', 'faster', 'slower', 'back', 'forward', 'top', 'bigger', 'smaller', 'mirror', 'record', 'mode']);
+  const COMMANDS = new Set(['hello', 'open', 'toggle', 'faster', 'slower', 'back', 'forward', 'top', 'bigger', 'smaller', 'mirror', 'mode']);
   const MODES = new Set(['voice', 'auto', 'manual']);
   const RATE = { burst: 20, perSecond: 10 };          // per remote; more than this and it's disconnected
   const CONN_OPTS = (metadata) => ({ reliable: true, serialization: 'json', metadata });
@@ -74,7 +74,6 @@
       type: 'state',
       active: s.active === true,
       playing: s.playing === true,
-      recording: s.recording === true,
       mode: MODES.has(s.mode) ? s.mode : 'auto',
       speed: num(s.speed, 0, 100, 5),
       fontSize: num(s.fontSize, 1, 1000, 52),

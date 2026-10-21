@@ -11,6 +11,8 @@
   const { Tracker } = root.OpenCueTracker;
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const SPEED_EASE = 8; // 1/s; higher settles faster
+  const PACE_COAST = 1.5; // continuous voice scrolling: seconds to keep moving after the last word heard
+  const PACE_LEAD = 3;    // ...and at most this many words past it
 
   class Prompter {
     constructor({ stage, text, eyeline, fade, progress }) {
@@ -30,6 +32,12 @@
       this.curSpeed = 0;   // actual speed, easing towards `speed` (or 0 when stopped)
       this.eyelinePct = 33;
       this.lineHeightPx = 80;
+      this.voiceFollow = 8; // Voice mode: how fast the text glides to the reader's line (1/s)
+      this.voiceLead = 0;   // Voice mode: lines the reader's line sits above the eyeline
+      this.voiceStyle = 'lines'; // Voice mode: 'lines' glides line by line, 'continuous' scrolls at the reading pace
+      this.listening = false;    // set by the app while Voice mode is running
+      this._lines = null;        // word -> line map for continuous scrolling (rebuilt after reflow)
+      this._pace = { rate: 0, lastP: 0, lastT: 0, pos: 0 }; // reading pace (words/s) and fractional position
 
       this.wordEls = [];
       this.tracker = new Tracker([]);
@@ -100,6 +108,8 @@
       this.playing = false;
       this.curSpeed = 0;
       this._anchor = null;
+      this._lines = null;
+      this._pace = { rate: 0, lastP: 0, lastT: 0, pos: 0 };
       this.offset = this.target = 0;
       this.layout();
     }
@@ -124,8 +134,9 @@
       const geom = `${this.text.offsetWidth}|${this.text.offsetHeight}|${this.padTop}|${this.lineHeightPx}`;
       const reflowed = this._geom && geom !== this._geom;
       this._geom = geom;
+      if (reflowed) this._lines = null;
       if (this.mode === 'voice' && this.wordEls.length) {
-        this.target = this.wordOffset(this.anchorIndex());
+        this.target = this.voiceStyle === 'continuous' ? this.contTarget(this._pace.pos) : this.voiceTarget(this.anchorIndex());
       } else if (reflowed && this._anchor && this.offset > 0) {
         // Same word on the eyeline, same distance into its line, so nothing appears to jump.
         const y = this.rawWordOffset(this._anchor.i) + this._anchor.lines * this.lineHeightPx;
@@ -206,10 +217,12 @@
 
     voiceUpdate(words) {
       const p = this.tracker.update(words);
-      if (p !== null) this.setVoicePos(p);
+      if (p !== null) this.setVoicePos(p, true);
     }
 
-    setVoicePos(p) {
+    // heard: the position came from speech (feeds the reading-pace estimate),
+    // rather than a click, reset or mode switch.
+    setVoicePos(p, heard = false) {
       const n = this.wordEls.length;
       p = clamp(p, 0, n);
       const from = Math.min(p, this.readUpTo), to = Math.max(p, this.readUpTo);
@@ -219,7 +232,75 @@
       if (this.currentEl) this.currentEl.classList.add('current');
       this.readUpTo = p;
       this.tracker.pos = p;
-      if (n) this.target = this.wordOffset(Math.min(p, n - 1));
+      this._trackPace(p, heard);
+      if (!n) return;
+      this.target = this.voiceStyle === 'continuous' ? this.contTarget(this._pace.pos) : this.voiceTarget(Math.min(p, n - 1));
+    }
+
+    // Measure how fast the reader is going (words per second, smoothed) so
+    // continuous scrolling can glide at their pace between recognizer updates.
+    _trackPace(p, heard) {
+      const pace = this._pace, now = performance.now();
+      const step = p - pace.lastP;
+      if (heard && step > 0 && step <= 12 && pace.lastT) {
+        const dt = (now - pace.lastT) / 1000;
+        if (dt > 0.05 && dt < 5) {
+          const inst = step / dt;
+          pace.rate = pace.rate ? pace.rate * 0.7 + inst * 0.3 : inst;
+        }
+      }
+      // A real jump (skip, re-read, click) moves straight there; small updates
+      // never pull the smooth position backwards.
+      if (!heard || p < pace.pos - 3 || p > pace.pos + 12) pace.pos = p;
+      else pace.pos = Math.max(pace.pos, p);
+      pace.lastP = p;
+      pace.lastT = now;
+    }
+
+    // Voice mode is starting or stopping: restart the pace clock so a pause
+    // doesn't count as reading time.
+    setListening(on) {
+      this.listening = on;
+      this._pace.lastT = performance.now();
+      this._pace.lastP = this.readUpTo;
+    }
+
+    // Continuous scrolling: the offset for a fractional word position. The
+    // reader's line is centered on the eyeline halfway through it, sits half a
+    // line low as they start it and half a line high as they finish, so the
+    // motion is seamless from one line to the next.
+    contTarget(x) {
+      const n = this.wordEls.length;
+      if (!n) return 0;
+      const L = this._lines || (this._lines = this._buildLines());
+      const i = clamp(Math.floor(x), 0, n - 1);
+      const li = L.of[i];
+      const start = L.start[li];
+      const end = li + 1 < L.start.length ? L.start[li + 1] : n;
+      const y = L.y[li];
+      const next = li + 1 < L.y.length ? L.y[li + 1] : y + this.lineHeightPx;
+      const prev = li > 0 ? L.y[li - 1] : y - this.lineHeightPx;
+      const f = clamp((x - start) / Math.max(1, end - start), 0, 1);
+      const pos = f >= 0.5 ? y + (f - 0.5) * (next - y) : y - (0.5 - f) * (y - prev);
+      return clamp(pos + this.voiceLead * this.lineHeightPx, 0, this.maxOffset);
+    }
+
+    _buildLines() {
+      const n = this.wordEls.length;
+      const of = new Int32Array(n), start = [], y = [];
+      let top = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const t = this.wordEls[i].offsetTop;
+        if (Math.abs(t - top) > 2) { start.push(i); y.push(this.rawWordOffset(i)); top = t; }
+        of[i] = start.length - 1;
+      }
+      return { of, start, y };
+    }
+
+    // Where to scroll for word i in Voice mode: its line on the eyeline, or
+    // voiceLead lines above it so more upcoming text shows below.
+    voiceTarget(i) {
+      return clamp(this.rawWordOffset(i) + this.voiceLead * this.lineHeightPx, 0, this.maxOffset);
     }
 
     clearRead() {
@@ -250,8 +331,21 @@
           }
         }
       }
+      // Continuous voice scrolling: between recognizer updates, keep moving at the
+      // reader's pace, but never more than a few words past the last word heard,
+      // and coast to a stop when they pause.
+      if (this.mode === 'voice' && this.voiceStyle === 'continuous' && this.wordEls.length) {
+        const pace = this._pace;
+        if (this.listening && pace.rate > 0) {
+          const since = (performance.now() - pace.lastT) / 1000;
+          const ahead = Math.min(pace.rate * Math.min(since, PACE_COAST), PACE_LEAD);
+          pace.pos = Math.max(pace.pos, Math.min(pace.lastP + ahead, this.wordEls.length));
+        }
+        this.target = this.contTarget(pace.pos);
+      }
       const diff = this.target - this.offset;
-      this.offset = Math.abs(diff) < 0.25 ? this.target : this.offset + diff * Math.min(1, dt * 8);
+      const rate = this.mode === 'voice' ? this.voiceFollow : 8;
+      this.offset = Math.abs(diff) < 0.25 ? this.target : this.offset + diff * Math.min(1, dt * rate);
       if (this.offset !== this._applied) {
         this._applied = this.offset;
         this.text.style.transform = `translate3d(0, ${(-this.offset).toFixed(2)}px, 0)`;

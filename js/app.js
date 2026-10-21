@@ -1,5 +1,5 @@
 /* OpenCue — application controller: script library, editor, playback,
- * settings, camera recording, remote control and keyboard shortcuts. */
+ * settings, remote control and keyboard shortcuts. */
 (function () {
   'use strict';
 
@@ -67,8 +67,6 @@
     gauge: '<path d="M12 14l3.5-3.5"/><path d="M3.5 18.5a9.5 9.5 0 1 1 17 0"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/>',
     hand: '<rect x="6.5" y="3" width="11" height="18" rx="5.5"/><path d="M12 7v3.5"/>',
     'chevron-down': '<path d="M6 9l6 6 6-6"/>',
-    camera: '<rect x="2.5" y="6" width="13.5" height="12" rx="2.5"/><path d="M16 10.2l4.4-2.6a.7.7 0 0 1 1.1.6v7.6a.7.7 0 0 1-1.1.6L16 13.8"/>',
-    record: '<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
     stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>',
     layout: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M8.5 4v16M15.5 4v16"/>',
     mirror: '<path d="M12 3v18" stroke-dasharray="2 2.6"/><path d="M8.5 7.5L4 12l4.5 4.5z"/><path d="M15.5 7.5L20 12l-4.5 4.5z"/>',
@@ -200,12 +198,12 @@
     countdown: 3,
     lang: navLang,
     showHeard: true,
-    cameraLayout: 'pip',
-    cameraId: '',
-    micId: '',
+    voiceScroll: 'lines',  // Voice mode: 'lines' glides line by line, 'continuous' scrolls at your reading pace
+    voiceSmooth: 'normal', // how fast the text glides to your line in Voice mode
+    voiceLead: 0,          // lines your current line sits above the eyeline in Voice mode
     autoHide: true,
-    autoRecord: false,
   };
+  const VOICE_FOLLOW = { gentle: 4, normal: 8, snappy: 16 }; // easing rate, 1/s; 8 is the tested default
 
   const storedSettings = store.load('opencue.settings', {}) || {};
   if (!storedSettings.v) {
@@ -726,11 +724,11 @@ Good luck with your recording!`;
     elapsedFrom = performance.now();
     if (settings.mode === 'voice') {
       heardEl.textContent = '';
+      prompter.setListening(true);
       voice.start(settings.lang);
     } else if (settings.mode === 'auto') {
       prompter.playing = true;
     }
-    if (settings.autoRecord && camStream && !recorder) startRecording();
     updatePlayUI();
     showControls();
     broadcastState();
@@ -746,6 +744,7 @@ Good luck with your recording!`;
     playing = false;
     elapsed += performance.now() - elapsedFrom;
     voice.stop();
+    prompter.setListening(false);
     prompter.playing = false;
     updatePlayUI();
     showControls();
@@ -895,7 +894,6 @@ Good luck with your recording!`;
     stage.classList.toggle('uppercase', settings.uppercase);
     stage.classList.toggle('no-eyeline', !settings.showEyeline);
     stage.classList.toggle('dim-read', settings.dimRead);
-    stage.classList.toggle('cam-bg', settings.cameraLayout === 'background');
     stage.classList.toggle('show-heard', settings.showHeard);
     $('#mirror').style.transform = `scale(${settings.mirrorX ? -1 : 1}, ${settings.mirrorY ? -1 : 1})`;
     const mirrored = settings.mirrorX || settings.mirrorY;
@@ -908,6 +906,9 @@ Good luck with your recording!`;
       eyelinePct: settings.eyeline,
       lineHeightPx: settings.fontSize * settings.lineHeight,
       speed: settings.speed,
+      voiceFollow: VOICE_FOLLOW[settings.voiceSmooth] || VOICE_FOLLOW.normal,
+      voiceLead: clamp(Number(settings.voiceLead) || 0, 0, 2),
+      voiceStyle: settings.voiceScroll === 'continuous' ? 'continuous' : 'lines',
     });
     syncSettingsUI();
     saveSettings();
@@ -922,11 +923,9 @@ Good luck with your recording!`;
     for (const [key, fn] of binds) fn(key ? settings[key] : settings);
   }
   function setSetting(key, value) {
-    const prev = settings[key];
     settings[key] = value;
     if (key === 'lang' && playing && settings.mode === 'voice') { voice.stop(); voice.start(settings.lang); }
     applySettings();
-    if ((key === 'cameraId' || key === 'micId') && prev !== value) devicesChanged();
   }
 
   let uidN = 0;
@@ -1085,31 +1084,10 @@ Good luck with your recording!`;
     ['Text size', ['+', '−']],
     ['Script width', ['[', ']']],
     ['Mirror', ['M']],
-    ['Camera / record', ['C', 'R']],
     ['Fullscreen', ['F']],
     ['Settings', ['S']],
     ['Close a menu, Settings, Scripts or the editor', ['Esc']],
   ];
-
-  // ---- camera & mic section pieces (wired up further down)
-  const dev = {
-    camSel: h('select', { class: 'select', 'aria-label': 'Camera' }),
-    micSel: h('select', { class: 'select', 'aria-label': 'Microphone' }),
-    permHint: h('p', { class: 'set-hint', text: 'Device names appear after you allow access. Choose “Check devices” to grant it.' }),
-    video: h('video', { muted: true, playsinline: true, autoplay: true }),
-    meterFill: h('div', { class: 'meter-fill' }),
-    status: h('p', { class: 'device-status', text: '' }),
-    camBtn: h('button', { type: 'button', class: 'btn small', html: icon('camera') + '<span class="label">Turn camera on</span>' }),
-    recBtn: h('button', { type: 'button', class: 'btn small', html: icon('record') + '<span class="label">Record</span>' }),
-    checkBtn: h('button', { type: 'button', class: 'btn small', text: 'Check devices' }),
-  };
-  dev.video.muted = true;
-  dev.panel = h('div', { class: 'device-check', hidden: true },
-    dev.video,
-    h('div', { class: 'meter-row' }, h('span', { html: icon('mic') }), h('div', { class: 'meter', role: 'meter', 'aria-label': 'Microphone level', 'aria-valuemin': '0', 'aria-valuemax': '100' }, dev.meterFill)),
-    dev.status);
-  dev.camSel.addEventListener('change', () => setSetting('cameraId', dev.camSel.value));
-  dev.micSel.addEventListener('change', () => setSetting('micId', dev.micSel.value));
 
   const SECTIONS = [
     {
@@ -1155,22 +1133,20 @@ Good luck with your recording!`;
       ],
     },
     {
-      id: 'camera', title: 'Camera & mic', icon: 'camera', keywords: 'webcam video microphone mic audio devices input record recording take preview check level',
-      action: dev.checkBtn,
-      build: () => [
-        rowEl('Camera', dev.camSel, { keywords: 'webcam video device input' }),
-        rowEl('Microphone', dev.micSel, { keywords: 'mic audio device input' }),
-        Object.assign(dev.permHint, { hidden: true }),
-        dev.panel,
-        segmented('cameraLayout', 'Camera view', [['pip', 'Small preview'], ['background', 'Behind text']], { keywords: 'pip picture background' }),
-        toggle('autoRecord', 'Record when I press Start', { keywords: 'auto record take camera' }),
-        h('div', { class: 'btn-row', dataset: { search: 'camera on off record recording start stop webcam' } }, dev.camBtn, dev.recBtn),
-      ],
-    },
-    {
-      id: 'voice', title: 'Voice', icon: 'mic', keywords: 'speech recognition language dictation listen transcript heard locale accent',
+      id: 'voice', title: 'Voice', icon: 'mic', keywords: 'speech recognition language dictation listen transcript heard locale accent smooth smoothness follow look ahead lead lines',
       build: () => [
         rowEl('Recognition language', selectEl('lang', 'Recognition language', LANGS), { keywords: 'locale accent dialect' }),
+        segmented('voiceScroll', 'Voice scrolling', [['lines', 'By line'], ['continuous', 'Continuous']], {
+          keywords: 'scroll style linear continuous steady line by line pace',
+        }),
+        h('p', { class: 'set-hint', dataset: { search: 'scroll style linear continuous steady line pace' }, text: 'By line glides up each time you reach a new line. Continuous scrolls steadily at your reading pace and eases to a stop when you pause.' }),
+        segmented('voiceSmooth', 'Scroll smoothness', [['gentle', 'Gentle'], ['normal', 'Normal'], ['snappy', 'Snappy']], {
+          keywords: 'smooth smoothness follow speed glide catch up snappy gentle',
+        }),
+        segmented('voiceLead', 'Lines of look-ahead', [[0, 'None'], [1, '1 line'], [2, '2 lines']], {
+          keywords: 'look ahead lead lines upcoming next eyeline position',
+        }),
+        h('p', { class: 'set-hint', dataset: { search: 'look ahead lead lines upcoming next eyeline smooth' }, text: 'Look-ahead keeps the line you’re reading that many lines above the eyeline, so more of what’s coming shows below it.' }),
         toggle('showHeard', 'Show what the mic hears', { keywords: 'transcript caption heard words' }),
         h('p', {
           class: 'set-hint',
@@ -1229,7 +1205,6 @@ Good luck with your recording!`;
           if (c) ui.collapsed.push(sec.id);
           saveUI();
         }
-        if (c && sec.id === 'camera') stopCheck();
       });
       sectionEls.push({ sec, card, body, setCollapsed });
       settingsBody.appendChild(card);
@@ -1248,7 +1223,7 @@ Good luck with your recording!`;
       const kids = Array.from(body.children);
       if (!terms.length) {
         card.hidden = false;
-        kids.forEach((k) => { if (k !== dev.panel && k !== dev.permHint) k.hidden = false; });
+        kids.forEach((k) => { k.hidden = false; });
         setCollapsed(ui.collapsed.includes(sec.id));
         any = true;
         continue;
@@ -1257,7 +1232,6 @@ Good luck with your recording!`;
       const secMatch = terms.every((t) => secText.includes(t));
       let rowMatch = false;
       for (const k of kids) {
-        if (k === dev.panel || k === dev.permHint) continue;
         const text = k.dataset.search;
         const m = secMatch || (text != null && terms.every((t) => text.includes(t)));
         k.hidden = !m;
@@ -1269,12 +1243,12 @@ Good luck with your recording!`;
     }
     const empty = $('#settings-empty');
     empty.hidden = any;
-    empty.replaceChildren('No settings match ', h('b', { text: `“${settingsSearch.value.trim()}”` }), '. Try “speed”, “font” or “camera”.');
+    empty.replaceChildren('No settings match ', h('b', { text: `“${settingsSearch.value.trim()}”` }), '. Try “speed”, “font” or “mirror”.');
   }
   settingsSearch.addEventListener('input', filterSettings);
 
   $('#reset-settings').addEventListener('click', () => {
-    const keep = { mode: settings.mode, lang: settings.lang, cameraId: settings.cameraId, micId: settings.micId };
+    const keep = { mode: settings.mode, lang: settings.lang };
     settings = Object.assign({}, DEFAULTS, keep);
     applySettings();
     updatePlayUI();
@@ -1288,7 +1262,6 @@ Good luck with your recording!`;
     settingsPanel.inert = false;
     $('#tb-settings').classList.add('on');
     $('#tb-settings').setAttribute('aria-expanded', 'true');
-    refreshDevices();
     showControls();
     if (focusSearch) setTimeout(() => settingsSearch.focus(), 50);
   }
@@ -1299,7 +1272,6 @@ Good luck with your recording!`;
     settingsPanel.inert = true;
     $('#tb-settings').classList.remove('on');
     $('#tb-settings').setAttribute('aria-expanded', 'false');
-    stopCheck();
     if (hadFocus && !prompterView.hidden) $('#tb-settings').focus({ preventScroll: true });
     showControls();
   }
@@ -1425,8 +1397,6 @@ Good luck with your recording!`;
   $('#tb-slower').addEventListener('click', () => changeSpeed(-0.5));
   $('#tb-faster').addEventListener('click', () => changeSpeed(0.5));
   $('#tb-mirror').addEventListener('click', toggleMirror);
-  $('#tb-camera').addEventListener('click', toggleCamera);
-  $('#tb-record').addEventListener('click', toggleRecording);
   $('#tb-fullscreen').addEventListener('click', toggleFullscreen);
   $('#tb-settings').addEventListener('click', () => toggleSettings());
   $('#settings-close').addEventListener('click', closeSettings);
@@ -1443,7 +1413,6 @@ Good luck with your recording!`;
   const remoteView = $('#remote-view');
 
   function openRemoteView(room) {
-    if (recorder) { toast('Stop recording before switching to the remote.', 4000, 'warn'); return; }
     pause();
     setSidebar(false);
     closeEditor();
@@ -1500,261 +1469,6 @@ Good luck with your recording!`;
     b.classList.toggle('on', fs);
   });
 
-  // ---------------------------------------------------------------- camera & recording
-
-  const camVideo = $('#camera');
-  const recBadge = $('#rec-badge');
-  let camStream = null;
-  let recorder = null;
-  let recChunks = [];
-  let recStart = 0;
-  let recTimer = 0;
-  const mediaOK = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-
-  function mediaConstraints() {
-    const video = { width: { ideal: 1920 }, height: { ideal: 1080 } };
-    if (settings.cameraId) video.deviceId = { exact: settings.cameraId };
-    else video.facingMode = 'user';
-    const audio = { echoCancellation: true, noiseSuppression: true };
-    if (settings.micId) audio.deviceId = { exact: settings.micId };
-    return { video, audio };
-  }
-
-  async function getMedia() {
-    try {
-      return await navigator.mediaDevices.getUserMedia(mediaConstraints());
-    } catch (err) {
-      if ((err.name === 'OverconstrainedError' || err.name === 'NotFoundError') && (settings.cameraId || settings.micId)) {
-        settings.cameraId = '';
-        settings.micId = '';
-        applySettings();
-        toast('The selected camera or microphone isn’t available. Using the defaults.', 5000, 'warn');
-        return navigator.mediaDevices.getUserMedia(mediaConstraints());
-      }
-      throw err;
-    }
-  }
-
-  async function toggleCamera() {
-    if (camStream) return stopCamera();
-    if (!mediaOK()) {
-      toast('Camera access is not available in this browser', 4000, 'error');
-      return;
-    }
-    if (check && check.own) {
-      // Hand the device-check stream over instead of asking for the camera twice.
-      camStream = check.stream;
-      check.own = false;
-    } else {
-      try {
-        camStream = await getMedia();
-      } catch (err) {
-        toast(`Could not open the camera: ${err.message || err.name}`, 5000, 'error');
-        return;
-      }
-    }
-    camVideo.srcObject = camStream;
-    camVideo.play().catch(() => {});
-    stage.classList.add('cam-on');
-    updateCamUI();
-    refreshDevices();
-  }
-
-  function stopCamera() {
-    if (!camStream) return;
-    stopRecording();
-    if (check) {
-      if (check.stream === camStream) stopCheck();
-    }
-    camStream.getTracks().forEach((t) => t.stop());
-    camStream = null;
-    camVideo.srcObject = null;
-    stage.classList.remove('cam-on');
-    updateCamUI();
-  }
-
-  async function devicesChanged() {
-    if (camStream && !recorder) {
-      const restartCheck = !!check;
-      stopCheck();
-      stopCamera();
-      await toggleCamera();
-      if (restartCheck) startCheck();
-    } else if (camStream && recorder) {
-      toast('The new device will be used after this recording.', 4000, 'warn');
-    } else if (check) {
-      stopCheck();
-      startCheck();
-    }
-  }
-
-  function pickMime() {
-    if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
-    return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4']
-      .find((t) => MediaRecorder.isTypeSupported(t)) || '';
-  }
-
-  async function toggleRecording() {
-    if (recorder) return stopRecording();
-    if (!camStream) await toggleCamera();
-    if (camStream) startRecording();
-  }
-
-  function startRecording() {
-    if (recorder || !camStream) return;
-    if (typeof MediaRecorder === 'undefined') {
-      toast('Recording is not supported in this browser', 4000, 'error');
-      return;
-    }
-    const mimeType = pickMime();
-    let rec;
-    try {
-      rec = new MediaRecorder(camStream, mimeType ? { mimeType, videoBitsPerSecond: 8000000 } : undefined);
-    } catch (err) {
-      toast(`Could not start recording: ${err.message}`, 5000, 'error');
-      return;
-    }
-    const chunks = (recChunks = []);
-    const title = current().title;
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    rec.onstop = () => {
-      const type = rec.mimeType || mimeType || 'video/webm';
-      const ext = type.includes('mp4') ? 'mp4' : 'webm';
-      download(new Blob(chunks, { type }), `${slug(title)}-take-${stamp()}.${ext}`);
-      toast('Recording saved to your downloads');
-    };
-    rec.start(1000);
-    recorder = rec;
-    recStart = Date.now();
-    recTimer = setInterval(() => { $('#rec-time').textContent = `REC ${fmtClock(Date.now() - recStart)}`; }, 500);
-    $('#rec-time').textContent = 'REC 00:00';
-    updateCamUI();
-  }
-
-  function stopRecording() {
-    if (!recorder) return;
-    try { recorder.stop(); } catch (_) { /* already inactive */ }
-    recorder = null;
-    clearInterval(recTimer);
-    updateCamUI();
-  }
-
-  function updateCamUI() {
-    const cb = $('#tb-camera');
-    cb.classList.toggle('on', !!camStream);
-    cb.setAttribute('aria-pressed', String(!!camStream));
-    cb.dataset.tip = camStream ? 'Turn camera off' : 'Turn camera on';
-    const rb = $('#tb-record');
-    rb.classList.toggle('recording', !!recorder);
-    setIcon(rb, recorder ? 'stop' : 'record');
-    rb.querySelector('.label').textContent = recorder ? 'Stop' : 'Record';
-    rb.dataset.tip = recorder ? 'Stop recording' : 'Record video';
-    rb.setAttribute('aria-label', rb.dataset.tip);
-    recBadge.hidden = !recorder;
-    dev.camBtn.innerHTML = icon('camera') + `<span class="label">${camStream ? 'Turn camera off' : 'Turn camera on'}</span>`;
-    dev.recBtn.innerHTML = icon(recorder ? 'stop' : 'record').replace('<svg', '<svg data-rec') + `<span class="label">${recorder ? 'Stop recording' : 'Record'}</span>`;
-    dev.recBtn.classList.toggle('danger', !!recorder);
-  }
-  dev.camBtn.addEventListener('click', toggleCamera);
-  dev.recBtn.addEventListener('click', toggleRecording);
-
-  // ---- device pickers and check panel
-
-  function fillDevices(sel, devices, noun, key) {
-    const opts = [['', 'System default']];
-    devices.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
-      .forEach((d, i) => opts.push([d.deviceId, d.label || `${noun} ${i + 1}`]));
-    if (settings[key] && !opts.some(([v]) => v === settings[key])) opts.push([settings[key], `Saved ${noun.toLowerCase()} (not connected)`]);
-    sel.replaceChildren(...opts.map(([v, l]) => new Option(l, v)));
-    sel.value = settings[key];
-  }
-
-  async function refreshDevices() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      dev.camSel.disabled = dev.micSel.disabled = true;
-      return;
-    }
-    let list = [];
-    try { list = await navigator.mediaDevices.enumerateDevices(); } catch (_) { return; }
-    fillDevices(dev.camSel, list.filter((d) => d.kind === 'videoinput'), 'Camera', 'cameraId');
-    fillDevices(dev.micSel, list.filter((d) => d.kind === 'audioinput'), 'Microphone', 'micId');
-    dev.permHint.hidden = list.some((d) => d.label) || !!settingsSearch.value.trim();
-  }
-  bindUI('cameraId', (v) => { if (dev.camSel.value !== v && dev.camSel.querySelector(`option[value="${CSS.escape(v)}"]`)) dev.camSel.value = v; });
-  bindUI('micId', (v) => { if (dev.micSel.value !== v && dev.micSel.querySelector(`option[value="${CSS.escape(v)}"]`)) dev.micSel.value = v; });
-  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-    navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
-  }
-
-  let check = null; // { stream, own, ctx, raf }
-  async function startCheck() {
-    if (check) return;
-    dev.panel.hidden = false;
-    dev.checkBtn.textContent = 'Done';
-    const sec = sectionEls.find((s) => s.sec.id === 'camera');
-    if (sec) sec.setCollapsed(false);
-    dev.status.textContent = 'Requesting camera and microphone access…';
-    dev.meterFill.style.transform = 'scaleX(0)';
-    if (!mediaOK()) {
-      dev.status.textContent = 'Camera and microphone access isn’t available in this browser.';
-      return;
-    }
-    const c = (check = { stream: null, own: false, ctx: null, raf: 0 });
-    try {
-      if (camStream) c.stream = camStream;
-      else { c.stream = await getMedia(); c.own = true; }
-    } catch (err) {
-      if (check === c) check = null;
-      dev.status.textContent = err.name === 'NotAllowedError'
-        ? 'Access was blocked. Allow the camera and microphone in your browser’s site settings.'
-        : `Couldn’t open your devices: ${err.message || err.name}`;
-      return;
-    }
-    if (check !== c) { if (c.own) c.stream.getTracks().forEach((t) => t.stop()); return; }
-    dev.video.srcObject = c.stream;
-    dev.video.play().catch(() => {});
-    const vt = c.stream.getVideoTracks()[0], at = c.stream.getAudioTracks()[0];
-    dev.status.textContent = [vt && vt.label, at && at.label].filter(Boolean).join(' · ') || 'Devices connected';
-    refreshDevices();
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (at && AC) {
-      try {
-        c.ctx = new AC();
-        const an = c.ctx.createAnalyser();
-        an.fftSize = 1024;
-        c.ctx.createMediaStreamSource(c.stream).connect(an);
-        const buf = new Float32Array(an.fftSize);
-        let level = 0;
-        const meter = dev.meterFill.parentElement;
-        const loop = () => {
-          an.getFloatTimeDomainData(buf);
-          let sum = 0;
-          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-          const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-8);
-          const target = clamp((db + 60) / 54, 0, 1);
-          level = target > level ? target : level * 0.9 + target * 0.1;
-          dev.meterFill.style.transform = `scaleX(${level.toFixed(3)})`;
-          meter.setAttribute('aria-valuenow', String(Math.round(level * 100)));
-          c.raf = requestAnimationFrame(loop);
-        };
-        loop();
-      } catch (_) { /* no meter */ }
-    }
-  }
-  function stopCheck() {
-    if (dev.panel.hidden && !check) return;
-    dev.panel.hidden = true;
-    dev.checkBtn.textContent = 'Check devices';
-    if (!check) return;
-    const c = check;
-    check = null;
-    cancelAnimationFrame(c.raf);
-    if (c.ctx) c.ctx.close().catch(() => {});
-    if (c.own && c.stream !== camStream) c.stream.getTracks().forEach((t) => t.stop());
-    dev.video.srcObject = null;
-  }
-  dev.checkBtn.addEventListener('click', () => (check || !dev.panel.hidden ? stopCheck() : startCheck()));
-
   // ---------------------------------------------------------------- wake lock
 
   let wakeLock = null;
@@ -1791,11 +1505,6 @@ Good luck with your recording!`;
       case 'bigger': changeFont(1); break;
       case 'smaller': changeFont(-1); break;
       case 'mirror': toggleMirror(); break;
-      case 'record':
-        // A remote may start or stop a take, but never switch the camera on by itself.
-        if (camStream) toggleRecording();
-        else toast('A remote asked to record. Turn the camera on here first.', 4000, 'warn');
-        break;
       case 'mode': setMode(m.value); break;
     }
     broadcastState();
@@ -1828,7 +1537,6 @@ Good luck with your recording!`;
       fontSize: settings.fontSize,
       progress: prompter.progressRatio(),
       title: (current() && current().title.trim()) || 'Untitled script',
-      recording: !!recorder,
     });
   }
   setInterval(() => { if (remoteView.hidden) broadcastState(); }, 500);
@@ -1947,8 +1655,6 @@ Good luck with your recording!`;
     else if (k === ']') changeWidth(5);
     else if (k === 'm') toggleMirror();
     else if (k === 'f') toggleFullscreen();
-    else if (k === 'c') toggleCamera();
-    else if (k === 'r') toggleRecording();
     else if (k === 's') toggleSettings({ focusSearch: true });
     else handled = false;
     if (handled) {
@@ -2006,7 +1712,6 @@ Good luck with your recording!`;
   document.body.classList.add('prompter-open');
   loadIntoPrompter();
   renderList();
-  updateCamUI();
   updatePlayUI();
   requestWakeLock();
   routeFromHash(); // a QR link or #remote opens straight into the Remote tab

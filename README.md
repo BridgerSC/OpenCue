@@ -1,21 +1,20 @@
 # OpenCue
 
-A free, open-source teleprompter that runs in your browser. It follows your voice as you read, scrolls at a steady speed, or lets you scroll by hand. It can also record you on camera while you read.
+A free, open-source teleprompter that runs in your browser. It follows your voice as you read, scrolls at a steady speed, or lets you scroll by hand. A phone or tablet can control it as a remote.
 
 No accounts, no build step and no server. Your scripts stay in your browser's local storage.
 
 ## Features
 
-- **Voice tracking.** OpenCue listens while you read and keeps your current line on the eyeline. Pause and it waits for you. Skip ahead or go back and it catches up. Words you've already said are dimmed and the last one you said is highlighted.
+- **Voice tracking.** OpenCue listens while you read and keeps your current line on the eyeline. Pause and it waits for you. Skip ahead or go back and it catches up. Words you've already said are dimmed and the last one you said is highlighted. In Settings → Voice you can choose **By line** (glides up at each new line) or **Continuous** (scrolls steadily at your reading pace and stops when you pause), plus scroll smoothness and 0–2 lines of look-ahead.
 - **Auto-scroll** at an adjustable speed, plus a **manual** mode for an operator (mouse wheel, touch drag, arrow keys).
 - **Everything in one window.** The prompter is the home screen. **Scripts** (top left) slides in your library, where each script has **Edit**, which opens a clean editor in a pop-up, and **Present**.
 - **Script library** with search, autosave, word count and an estimated reading time. You can import `.txt`/`.md` files, export scripts, and back up or restore everything as JSON.
 - **Simple markup:** `[stage directions]` are shown but not read, `# Headings` mark sections, and `*emphasis*` highlights words. A small toolbar above the editor inserts or wraps each of these at the cursor (`Ctrl+B` for emphasis).
 - **Display options:** text size, line-height presets, script width, horizontal position, font, alignment, ALL CAPS, colors and presets, and an eyeline with an adjustable position and color.
 - **Mirror mode** (horizontal and/or vertical) for beam-splitter teleprompter rigs.
-- **Camera preview and recording**, as a small preview or behind the text. Pick the camera and microphone in Settings, and use "Check devices" for a live preview and a mic level meter. Takes are saved to your downloads as `.webm` or `.mp4`.
 - **Floating control bar** with Start/Pause, restart, a mode switcher, a speed stepper in Auto mode, a Layout popover and a progress track. It hides while you're running and comes back when you move the mouse.
-- **Searchable settings drawer** grouped into collapsible sections: Scrolling, Typography, Layout, Display, Camera & mic, Voice, Behavior and Keyboard shortcuts.
+- **Searchable settings drawer** grouped into collapsible sections: Scrolling, Typography, Layout, Display, Voice, Behavior and Keyboard shortcuts.
 - **Phone or tablet remote, built in.** Press **Remote** in the prompter's bar and scan the QR code; the phone opens OpenCue's Remote tab already paired. Or, on the phone, open **Scripts**, then **Use this device as a remote**, and type the 6-character room code, and the presenter taps Allow. The same tab also works as a second window on the same computer. Remotes get status only, never the script.
 - **Installable app** on Mac, Windows, iPad and iPhone (it's a PWA). The installed app opens offline.
 - A countdown, a timer, fullscreen, and a screen wake lock.
@@ -26,7 +25,7 @@ No accounts, no build step and no server. Your scripts stay in your browser's lo
 
 Open `index.html` in a browser. That's it.
 
-Some browsers only allow microphone and camera access over `http://localhost` or HTTPS. If they're blocked from a `file://` URL, serve the folder:
+Some browsers only allow microphone access over `http://localhost` or HTTPS. If they're blocked from a `file://` URL, serve the folder:
 
 ```bash
 npx serve .
@@ -52,7 +51,6 @@ Then open <http://localhost:8000>. To host it publicly, any static host works (G
 | `+` `-` | Text size |
 | `[` `]` | Script width |
 | `M` | Mirror |
-| `C` / `R` | Camera / record |
 | `F` | Fullscreen |
 | `S` | Settings |
 | `Esc` | Close a menu, Settings, the Scripts panel or the editor |
@@ -61,11 +59,11 @@ In the editor, `Ctrl+Enter` (`⌘+Enter` on a Mac) presents the script and `Ctrl
 
 ## Browser support
 
-| | Voice tracking | Auto / manual | Recording |
+| | Voice tracking | Auto / manual | Install as an app |
 | --- | --- | --- | --- |
 | Chrome, Edge (desktop and Android) | ✅ | ✅ | ✅ |
-| Safari (macOS, iOS) | ✅ | ✅ | ✅ (mp4) |
-| Firefox | ❌ (no Web Speech API) | ✅ | ✅ |
+| Safari (macOS, iOS) | ✅ | ✅ | ✅ (Add to Dock / Home Screen) |
+| Firefox | ❌ (no Web Speech API) | ✅ | ❌ |
 
 Voice tracking uses the browser's built-in [Web Speech API](https://developer.mozilla.org/docs/Web/API/SpeechRecognition). **Privacy note:** in Chrome and Edge, the browser sends microphone audio to its vendor's speech service to transcribe it, so voice mode needs an internet connection. Safari may transcribe on the device. OpenCue shows a one-time notice about this before Voice mode is first used, and defaults to Auto.
 
@@ -73,11 +71,10 @@ Voice tracking uses the browser's built-in [Web Speech API](https://developer.mo
 
 - **No server, no accounts.** Scripts live only in each person's browser (`localStorage`) and never leave the device. Backups are files the user downloads.
 - **Phone remote.** Pairing goes through the public [PeerJS](https://peerjs.com) server, which introduces the two devices and sees their IP addresses and the room ID. After that, traffic is a direct WebRTC connection, encrypted with DTLS, or goes through PeerJS's relay when a network blocks direct connections.
-  - Remotes receive status only: title, mode, speed, text size, progress, and playing/recording.
+  - Remotes receive status only: title, mode, speed, text size, progress, and whether it's playing.
   - Incoming messages must be JSON, are checked against a fixed command list, and are rate limited.
   - The QR link carries a 128-bit secret. A typed room code needs the presenter's approval.
   - "New code" disconnects everyone.
-  - A remote can't switch the camera on.
 - **Hardening.** A Content Security Policy allows only OpenCue's own scripts, and the app refuses to run inside a frame.
 - **Hosting on GitHub Pages:** give OpenCue its own origin. Every Pages site under one `<account>.github.io` shares an origin, and with it localStorage, so a dedicated GitHub organization or a custom subdomain keeps other sites from reading scripts. Deploy only the files from `node tools/make-upload.js`, which leaves out the test pages.
 
@@ -127,7 +124,7 @@ js/parser.js      script markup parser + word normalization
 js/tracker.js     voice position tracker
 js/voice.js       Web Speech API wrapper with auto-restart
 js/prompter.js    the scrolling display
-js/app.js         editor, settings, playback, camera, remote, shortcuts
+js/app.js         editor, settings, playback, remote, shortcuts
 js/link.js        remote link: room codes, pairing, message checks (shared by both pages)
 js/remote.js      the Remote tab (phone/tablet by room code or QR, or another window)
 js/vendor/        PeerJS and qrcode-generator, copied unmodified (see its README)
@@ -141,7 +138,6 @@ test/speech/      Windows tooling that generates the speech fixtures
 - A self-hosted PeerJS server option, so the phone remote doesn't depend on the public one
 - Offline speech recognition (e.g. Vosk or Whisper in WebAssembly) for private, offline voice tracking
 - Rich-text editor and `.docx` / Google Docs import
-- Recording with the script burned in, or with background blur
 - Better tokenization for languages written without spaces (Chinese, Japanese, Thai)
 
 ## License
